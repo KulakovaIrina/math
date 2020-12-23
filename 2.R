@@ -1,217 +1,118 @@
 library(tidyverse)
 library(readr)
 library(sf)
-library(ggplot2)
+# загрузим табицу с данными
+dafr = read_csv2("city_trees2.csv")
+# сделаем ее массивом и выведем
+a = data.frame(dafr)
+a
+#выводим имена колонок данных -- это наши переменные
+colnames(a)
+# 1. Все переменные имеют корректный тип данных
+# Да
+# 2. Убррать повторяющиеся переменные
+a$HR <- NULL
+a$dbh_mm <- NULL
+a$X1 <- NULL
+# 3. Убрать размерности из имен переменных
+names(a)[names(a) == "dbh_m"] = "dbh"
+# в остальных переменных размерность не указывалась
+# 4. Всем переменным задать реальные размерности
+library(units) #устанавливаем соответсвующий пакет
+#устанавливаем нужную размерность 
+units(a$Ht) = as_units("m")
+units(a$dbh) = as_units("m")
+units(a$Clearance) = as_units("m")
+units(a$Crown_Depth) = as_units("m")
+units(a$Total_NSEW_Radial_Crown_Spread) = as_units("m")
+units(a$Average_Radial_Crown_spread) = as_units("m")
+units(a$Crown_Diameter) = as_units("m")
+units(a$Predicted_CD_comb_f) = as_units("m")
+units(a$Predicted_CD) = as_units("m")
+# 5. Если какая-то переменная является ошибкой другой переменной, она должна быть убрана и добавлена в виде ошибки к основной переменной
+# находим такие переменные и преобразуем их в ошибки
+a = a %>% mutate(error = Predicted_CD_comb_f - Crown_Diameter)
+a = a %>% mutate(error2 = Predicted_CD - Crown_Diameter)
+# удаляем старое ненужное
+a$Diference <- NULL
+a$Difference_comb_f <- NULL
 
-# #################################
+# 6, 7, 8.  Категориальные переменные должны быть факторами, Категории переменной из имени должны быть убраны, Коды категориальных переменных заменены их категориями
+a$Data_Set[a$Data_Set == "0"] = "Peterborough"
+a$Data_Set[a$Data_Set == "1"] = "Norwich"
+a$Data_Set
 
+# 10. Назвать виды на латыни
+# maple - Acer platanoides, 
+# Oak - Quercus robur,
+# Silver birch - Betula pendula, 
+# Sycamore - Platanus occidentalis
+a$Species[a$Species == "Oak"] = "Quercus robur"
+a$Species[a$Species == "Norway_maple"] = "Acer platanoides"
+a$Species[a$Species == "Norway_Maple"] = "Acer platanoides"
+a$Species[a$Species == "Silver_Birch"] = "Betula pendula"
+a$Species[a$Species == "Sycamore"] = "Platanus occidentalis"
 
-library(readr)
-library(readr)
-library(readr)
-library(readr)
-trees1 <- read_delim("C:/Users/Ira/Desktop/Vfn vjltkm/math/trees1.csv", 
-                     ";", escape_double = FALSE, col_types = cols(Tno = col_double(), 
-                                                                  `% Variation` = col_double()), locale = locale(decimal_mark = ","), 
-                     trim_ws = TRUE)
-View(trees1)
-View(trees1)
+# 9. Должны быть созданы переменные координат(lat,lon) в британской системе координат(с учетом кодов квадратов) и в WGS84
+library(stringr)
+a$Grid_Reference
+coord1 = str_replace_all(a$Grid_Reference, ' ', '')
+coord_north = str_trunc(coord1, 12, "right", ellipsis = "") %>% str_trunc(5, "left", ellipsis = "")
+coord_north
+coord_e = str_trunc(coord1, 7, "right", ellipsis = "") %>% str_trunc(5, "left", ellipsis = "")
+quadr = str_trunc(coord1, 2, "right", ellipsis = "")
+table = data.frame(as.integer(coord_e), as.integer(coord_north), quadr)
+names(table) = c("E", "N", "Quadr")
+table = na.exclude(table)
+#----------
+table = table %>% mutate("Easting_BC" = case_when(
+  quadr == "TF" ~ E + 600000,
+  quadr == "TG" ~ E + 700000,
+  quadr == "TL" ~ E + 600000, 
+)) %>% mutate("Northing_BC" = case_when(
+  quadr == "TF" ~ N + 300000,
+  quadr == "TG" ~ N + 300000,
+  quadr == "TL" ~ N + 200000,
+))
+table = na.exclude(table)
 
-install.packages("ggplot2")
+#a$Age_Class[268] = "OM"
+#это единственное значение такого класса
+#припишем к другому классу, по одному значению построить ничего не получится
+a$Age_Class[268] = "M" #допустим, к классу М. На мой взгляд, он наиболее близок по свойствам
 
-plot(trees1$`Ht (m)`, trees1$`Crown Diameter (m)`)
-plot(trees1$`Ht (m)`,trees1$`Crown Diameter (m)`, xlab = 
-       
-ggplot(trees1, aes(x = `Ht (m)`, y = `Crown Diameter (m)`, color = Species)) + geom_point()
-     
-    
-     
-# #########################################
-     
-     
-dbh mm
-HR
-     
-install.packages('tidyverse')
+Model_common = lm(data = a, log(as.double(dbh), base = exp(1)) ~ (as.double(Ht)))
 
-install.packages("sf')
+ggplot(data = a, aes(x = as.double(Ht)^0.25, y=log(as.double(dbh), base = exp(1))))+
+  geom_point(aes(color=Age_Class))+
+  geom_smooth(method = "lm")+
+  facet_wrap(~Species)+
+  theme_bw()
 
-trees1 = trees1 %>% select(-`dbh (mm)`, -HR)
-     
-     
-     
-trees1 = trees1 %>% rename(dbh = `dbh (m)`)
-trees1 = trees1 %>% rename(Ht = `Ht (m)`)
-trees1 = trees1 %>% rename(Clearance_Ht = `Clearance Ht (m)`)
-trees1 = trees1 %>% rename(Crown_Depth = `Crown Depth (m)`)
-trees1 = trees1 %>% rename(Average_Radial_Crown_spread = `Average Radial Crown spread (m)`)
-trees1 = trees1 %>% rename(Total_Mean_Radial_Crown_Spread = `Total Mean Radial Crown Spread (m)`)
-trees1 = trees1 %>% rename(Crown_Diameter = `Crown Diameter (m)`)
-trees1 = trees1 %>% rename(Stem_diameter_Jan_2017 = `Stem diameter Jan 2017 (mm)`)
-trees1 = trees1 %>% rename(Annual_Girth_Increment = `Annual Girth Increment (mm)`)
-trees1 = trees1 %>% rename(Two_yr_dia_gain = `2yr dia gain (mm)`)
-trees1 = trees1 %>% rename(Total_NSEW_Radial_Crown_Spread = `Total N,S,E,W Radial Crown Spread (m)`)
-     
-     
-     
-library(units)
+ggplot(data = a, aes(x = as.double(Ht)^0.25, y=log(as.double(dbh), base = exp(1))))+
+  geom_point(aes(color=Species))+
+  geom_smooth(method = "lm")+
+  facet_wrap(~Age_Class)+
+  theme_bw()
 
-install.packages("units")
-     
-units(trees1$dbh) = as_units("m")
-units(trees1$Ht) = as_units("m")
-units(trees1$Clearance_Ht) = as_units("m")
-units(trees1$Crown_Depth) = as_units("m")
-units(trees1$Average_Radial_Crown_spread) = as_units("m")
-units(trees1$Total_NSEW_Radial_Crown_Spread) = as_units("m")
-units(trees1$Total_Mean_Radial_Crown_Spread) = as_units("m")
-units(trees1$Crown_Diameter) = as_units("m")
-units(trees1$Stem_diameter_Jan_2017) = as_units("mm")
-units(trees1$Two_yr_dia_gain) = as_units("mm")
-units(trees1$Annual_Girth_Increment) = as_units("mm")
-units(trees1$`Predicted crown diamet using combined formulla`) = as_units("m")
-units(trees1$`Predicted Crown Diameter`) = as_units("m")
-     
-     
-trees1 %>% as.data.frame()
-     
-     
-     
-     
-trees1 = trees1 %>% mutate(error = `Predicted crown diamet using combined formulla` - Crown_Diameter)
-     
-     trees1$error
-     
-     trees1 = trees1 %>% rename(Crown_Diameter_Using_Combined_Formulla_Error = Crown_Diameter_Error)
-     
-     trees1 = trees1 %>% mutate(Crown_Diameter_Error = `Predicted Crown Diameter` - Crown_Diameter)
-     
-     trees1 = trees1 %>% select(-Difference, Diference)
-     
-     Р С™Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘Р В°Р В»РЎРЉР Р…РЎвЂ№Р Вµ Р С—Р ВµРЎР‚Р ВµР СР ВµР Р…Р Р…РЎвЂ№Р Вµ Р Т‘Р С•Р В»Р В¶Р Р…РЎвЂ№ Р В±РЎвЂ№РЎвЂљРЎРЉ РЎвЂћР В°Р С”РЎвЂљР С•РЎР‚Р В°Р СР С‘
-     
-     library(forcats)
-     install.packages("forcats")
-     names(trees1)
-     
-     trees1$`Age Index 1=Y 2=SM 3=EM 4=M`
-     trees1 = trees1 %>% mutate(`Age Index 1=Y 2=SM 3=EM 4=M` = as.numeric(`Age Index 1=Y 2=SM 3=EM 4=M`))
-     
-     trees1 = trees1 %>%
-       mutate(AgeIndex = as_factor(`Age Index 1=Y 2=SM 3=EM 4=M`)) %>%
-       mutate(AgeIndex = fct_recode(AgeIndex,Y = "1", SM = "2",EM = "3", M = "4"))
-     
-     trees1$AgeIndex[trees1$AgeIndex == "<NA>"]
-     
-     trees1$AgeIndex
-     
-     trees1$`Data Set      1=Norwich                0= Peterborough`
-     trees1 = trees1 %>% 
-       mutate(DataSet = as_factor(`Data Set      1=Norwich                0= Peterborough`)) %>%
-       mutate(DataSet = fct_recode(DataSet, Norwich = "1", Peterborough = "0"))
-     
-     trees1$DataSet
-     
-     trees1$`Pruning Index 5 = pruned within 5yrs  10 pruned between 5 and 10yrs`
-     trees1 = trees1 %>%
-       mutate(PruningIndex = as_factor(`Pruning Index 5 = pruned within 5yrs  10 pruned between 5 and 10yrs`)) %>%
-       mutate(PruningIndex = fct_recode(PruningIndex,`pruned within 5yrs` = "5", `pruned between 5 and 10yrs` = "10"))
-     
-     trees1$PruningIndex
-     trees1$`Type of Prunning None= 0 CR= 1 Other = 2 Both = 3`
-     trees1 = trees1 %>%
-       mutate(TypeOfPruning = as_factor(`Type of Prunning None= 0 CR= 1 Other = 2 Both = 3`)) %>%
-       mutate(TypeOfPruning = fct_recode(TypeOfPruning,None = "0", CR = "1", Other = "2", Both = "3"))
-     trees1$TypeOfPruning
-     
-     trees1$`Soil Code 1=sand and gravel 2= Clay 3=silt`
-     trees1 = trees1 %>%
-       mutate(SoilCode = as_factor(`Soil Code 1=sand and gravel 2= Clay 3=silt`)) %>%
-       mutate(SoilCode = fct_recode(SoilCode,`Sand and Gravel` = "1", Clay = "2", Slit = "3"))
-     trees1$SoilCode
-     
-     
-     library(tidyverse)
-     
-     trees1$SoilCode
-     
-     trees1$SoilCode %>% as.integer()
-     
-     trees1 = trees1 %>% rename(geology = `Superfical Geology From British Geological Survey Geology of Britain Viewer`)
-     trees1$geology
-     
-     trees1 = trees1 %>% 
-       mutate(is_river = geology %>% str_detect("River"))
-     mutate(Soil= case_when(
-       is_river & SoilCode == "Sand and Gravel" ~ "River Sand and Gravel",
-       is_river & SoilCode == "Clay" ~ "River Clay",
-       is_river & SoilCode == "Silt" ~ "River Silt",
-       TRUE ~ as.character(Soil)
-     ) )
-     
-     trees1$is_river
-     
-     
-     # Transform all to latin 
-     # maple - Acer platanoides, 
-     # Oak - Quercus robur,
-     # Silver birch - Betula pendula, 
-     # Sycamore - Platanus occidentalis
-     
-     trees1$Species
-     trees1$Species[trees1$Species == "Oak"] = "Quercus robur"
-     trees1$Species[trees1$Species == "Norway maple"] = "Acer platanoides"
-     trees1$Species[trees1$Species == "Norway Maple"] = "Acer platanoides"
-     trees1$Species[trees1$Species == "Silver Birch"] = "Betula pendula"
-     trees1$Species[trees1$Species == "Sycamore"] = "Platanus occidentalis"
-     
-     
-     library(stringr)
-     trees1$`Grid Reference`
-     coord = str_replace_all(trees1$`Grid Reference`,' ','')
-     coord_N = str_trunc(coord, 12, "right", ellipsis = "") %>% str_trunc(5,"left", ellipsis = "")
-     coord_E = str_trunc(coord, 7, "right", ellipsis = "") %>% str_trunc( 5, "left", ellipsis = "")
-     quadr = str_trunc(coord, 2, "right", ellipsis = "")
-     table_1 = data.frame(as.integer(coord_E), as.integer(coord_N), quadr)
-     
-     names(table_1)=c("E", "N", "quadr")
-     head(table_1)
-     table_1 = na.exclude(table_1)
-     
-     table_1 = table_1 %>% mutate("Easting_BC" = case_when(
-       quadr == "TF" ~ E +600000,
-       quadr == "TG" ~ E +700000,
-       quadr == "TL" ~ E +600000,
-     ))
-     table_1 = table_1 %>% mutate("Northing_BC" = case_when(
-       quadr == "TF" ~ N +300000,
-       quadr == "TG" ~ N +300000,
-       quadr == "TL" ~ N +200000,
-     ))
-     
-     table_1 = na.exclude(table_1)
-     
-     
-     library(sf)
-     
-     table_WGS = 
-       table_1 %>%
-       st_as_sf(coords = c("Easting_BC", "Northing_BC"), crs = 27700) %>%
-       st_transform(4326) %>%
-       st_coordinates() %>% as.data.frame()
-     
-     table_WGS = data.frame(Lat = table_WGS$Y, Lon = table_WGS$X)
-     table_WGS %>% head
-     
-     trees1$`Grid Reference`[1]
-     table_1[1,]
-     table_WGS[1,]
-     
-     coord = cbind(table_1,table_WGS)
-     head(coord)
-     
-     trees1
-     
-     
-     
-     
+ggplot(data = a, aes(x = as.double(Ht)^0.25, y=log(as.double(dbh), base = exp(1))))+
+  geom_point(aes(color=Age_Class))+
+  geom_smooth(method = "lm")+
+  theme_bw()
+
+# Рассмотрим качество модели
+anova(Model_common)
+# Итоговые коэффициенты
+summary(Model_common)
+# Итоговые коэффициенты в доступном табличном виде
+broom::tidy((Model_common))
+
+biom_mod = function(a){lm(as.double(dbh) ~ as.double(Ht), data = a)}
+
+citymodels = a %>% group_by(Age_Class) %>% nest %>% filter(!is.na(Age_Class)) %>%
+  mutate(model = data %>% map(biom_mod))  %>%
+  mutate(resids = map2(data, model, modelr::add_residuals)) %>%
+  mutate(glance = map(model, broom::glance))
+
+results = citymodels %>% unnest(glance)
+results %>% filter(r.squared < 0.999) %>% arrange(desc(r.squared)) %>% select(Age_Class, r.squared)
